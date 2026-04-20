@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>To-Do App</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 600px;
+      margin: 40px auto;
+      padding: 0 20px;
+      background: #f5f5f5;
+    }
+    h1 { color: #333; }
+
+    .bg-picker-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .bg-picker-row label { font-size: 13px; }
+    #bgSelect {
+      padding: 6px 10px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 14px;
+      background: white;
+      cursor: pointer;
+    }
+    #bgColorPicker {
+      width: 36px; height: 32px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      padding: 2px;
+      cursor: pointer;
+      display: none;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+      align-items: center;
+    }
+    .input-row input {
+      padding: 8px 12px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+    #taskInput { flex: 1; min-width: 150px; }
+    #dueDateInput { width: 180px; }
+    #dateWrapper .flatpickr-calendar {
+      top: 100% !important;
+      left: 0 !important;
+      margin-top: 4px;
+    }
+    #groupSelect {
+      padding: 8px 12px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 14px;
+      background: white;
+      cursor: pointer;
+    }
+
+    .btn {
+      padding: 8px 16px;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .btn-blue { background: #4a90e2; }
+    .btn-blue:hover { background: #357abd; }
+    .btn-green { background: #5cb85c; }
+    .btn-green:hover { background: #4a9e4a; }
+
+    /* Task list */
+    #taskList { list-style: none; padding: 0; }
+    #taskList li {
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: white;
+      transition: opacity 0.15s;
+    }
+    #taskList li.drag-over {
+      border: 2px dashed #4a90e2;
+      background: #eef4fd !important;
+    }
+    #taskList li.dragging { opacity: 0.4; }
+
+    .drag-handle {
+      cursor: grab;
+      color: #bbb;
+      font-size: 18px;
+      padding-right: 12px;
+      user-select: none;
+      flex-shrink: 0;
+      line-height: 1;
+    }
+    .drag-handle:hover { color: #888; }
+    li.completed .drag-handle { visibility: hidden; cursor: default; }
+
+    .weather-hazard {
+      display: inline-block;
+      font-size: 13px;
+      margin-top: 4px;
+      cursor: default;
+      user-select: none;
+    }
+    .task-info .task-name { font-weight: bold; color: #222; }
+    .task-info .task-due { font-size: 12px; color: #555; margin-top: 4px; }
+    .task-info .task-group-badge {
+      display: inline-block;
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 20px;
+      margin-top: 4px;
+      color: white;
+      font-weight: bold;
+    }
+    .priority-badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: bold;
+      padding: 2px 8px;
+      border-radius: 20px;
+      margin-top: 4px;
+      color: white;
+    }
+    #taskList li.completed {
+      background: #f0f0f0 !important;
+      border-color: #ddd !important;
+      opacity: 0.7;
+    }
+    #taskList li.completed .task-name {
+      text-decoration: line-through;
+      color: #999 !important;
+    }
+    #taskList li.completed .task-due,
+    #taskList li.completed .priority-badge,
+    #taskList li.completed .task-group-badge { opacity: 0.5; }
+
+    .complete-btn {
+      background: #5cb85c;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 6px 10px;
+      cursor: pointer;
+      font-size: 13px;
+      margin-right: 6px;
+    }
+    .complete-btn:hover { background: #4a9e4a; }
+    .complete-btn.undo   { background: #aaa; }
+    .complete-btn.undo:hover { background: #888; }
+
+    .task-actions { display: flex; align-items: center; }
+    .delete-btn {
+      background: #e05a5a;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 6px 12px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .delete-btn:hover { background: #c0392b; }
+
+    /* Modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.4);
+      z-index: 100;
+      justify-content: center;
+      align-items: center;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: white;
+      border-radius: 10px;
+      padding: 24px;
+      width: 340px;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+    }
+    .modal h2 { margin: 0 0 16px; font-size: 18px; color: #333; }
+    .modal-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+      align-items: center;
+    }
+    .modal-row input[type="text"] {
+      flex: 1;
+      padding: 8px 10px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+    .modal-row input[type="color"] {
+      width: 40px;
+      height: 36px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      padding: 2px;
+      cursor: pointer;
+    }
+    .group-list { list-style: none; padding: 0; margin: 0 0 16px; }
+    .group-list li {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      margin-bottom: 6px;
+      font-size: 14px;
+      font-weight: bold;
+      color: white;
+    }
+    .group-list li button {
+      margin-left: auto;
+      background: rgba(0,0,0,0.25);
+      color: white;
+      border: none;
+      border-radius: 4px;
+      padding: 3px 8px;
+      cursor: pointer;
+      font-size:12px;
+    }
+    .modal-close {
+      width: 100%;
+      padding: 9px;
+      background: #aaa;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .modal-close:hover { background: #888; }
+  </style>
+</head>
+<body>
+  <h1>My Tasks</h1>
+
+  <div class="bg-picker-row">
+    <label id="bgLabel">Background:</label>
+    <select id="bgSelect" onchange="onBgSelectChange(this.value)">
+      <option value="#f5f5f5">Light Gray</option>
+      <option value="#ffffff">White</option>
+      <option value="#1a1a2e">Dark Navy</option>
+      <option value="#2d3436">Dark Gray</option>
+      <option value="custom">Custom...</option>
+    </select>
+    <input type="color" id="bgColorPicker" title="Pick a color" oninput="setBg(this.value)" />
+  </div>
+  <div id="weatherStatus" style="font-size:12px;color:#888;margin-bottom:12px;"></div>
+
+  <div class="input-row">
+    <input id="taskInput" placeholder="Enter a task" onkeydown="if(event.key==='Enter') addTask()" />
+    <div id="dateWrapper" style="position:relative;">
+      <input id="dueDateInput" placeholder="Due date & time" />
+    </div>
+    <select id="groupSelect"><option value="">No Group</option></select>
+    <button class="btn btn-blue" onclick="addTask()">Add</button>
+    <button class="btn btn-green" onclick="openGroupModal()">Groups</button>
+  </div>
+
+  <ul id="taskList"></ul>
+
+  <!-- Groups Modal -->
+  <div class="modal-overlay" id="groupModal">
+    <div class="modal">
+      <h2>Manage Groups</h2>
+      <div class="modal-row">
+        <input type="text" id="newGroupName" placeholder="Group name" />
+        <input type="color" id="newGroupColor" value="#4a90e2" />
+        <button class="btn btn-green" onclick="addGroup()">Add</button>
+      </div>
+      <ul class="group-list" id="groupList"></ul>
+      <button class="modal-close" onclick="closeGroupModal()">Close</button>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+  <script>
+    flatpickr("#dueDateInput", {
+      enableTime: true,
+      dateFormat: "M j, Y h:i K",
+      minDate: "today",
+      appendTo: document.getElementById("dateWrapper"),
+      position: "below"
+    });
+
+    // ── Data ────────────────────────────────────────────────────────────────
+    let groups = {};
+    let nextGroupId = 1;
+    let tasks = [];   // [{ id, name, dueDate, dueDateDisplay, groupId }]
+    let nextTaskId = 1;
+
+    // ── Persistence ─────────────────────────────────────────────────────────
+    function save() {
+      localStorage.setItem("todo_groups", JSON.stringify(groups));
+      localStorage.setItem("todo_nextGroupId", nextGroupId);
+      localStorage.setItem("todo_tasks", JSON.stringify(tasks));
+      localStorage.setItem("todo_nextTaskId", nextTaskId);
+    }
+
+    function load() {
+      try {
+        groups      = JSON.parse(localStorage.getItem("todo_groups"))      || {};
+        nextGroupId = parseInt(localStorage.getItem("todo_nextGroupId"))   || 1;
+        tasks       = JSON.parse(localStorage.getItem("todo_tasks"))       || [];
+        nextTaskId  = parseInt(localStorage.getItem("todo_nextTaskId"))    || 1;
+      } catch (_) {}
+    }
+
+    // ── Priority (client-side, recalculated fresh each render) ──────────────
+    function calcPriority(dueDateISO) {
+      if (!dueDateISO) return { label: "None", color: "#aaa" };
+      const hours = (new Date(dueDateISO) - Date.now()) / 36e5;
+      if (hours < 0)   return { label: "Overdue",  color: "#c0392b" };
+      if (hours <= 24) return { label: "Critical", color: "#e74c3c" };
+      if (hours <= 72) return { label: "High",     color: "#e67e22" };
+      if (hours <= 168)return { label: "Medium",   color: "#f1c40f" };
+                       return { label: "Low",      color: "#27ae60" };
+    }
+
+    // ── Render ───────────────────────────────────────────────────────────────
+    let dragSrcId = null;
+
+    // ── Weather hazard detection ──────────────────────────────────────────────
+    let currentHazards = [];   // hazards for today
+    let weatherForecast = {};  // { "YYYY-MM-DD": ['rain', ...] }
+    let weatherDesc    = "";
+
+    const HAZARD_KEYWORDS = {
+      rain:  ["wash","car","garden","mow","lawn","paint","bbq","grill","barbecue",
+               "bike","run","jog","walk","hike","picnic","window","gutter","roof",
+               "plant","outside","outdoor","clean"],
+      snow:  ["drive","shovel","walk","run","bike","outside","outdoor","garden","plant"],
+      storm: ["outside","outdoor","walk","run","jog","hike","bike","golf","swim",
+               "pool","wash","garden","bbq","grill"],
+      wind:  ["paint","roof","outside","outdoor","bbq","grill","umbrella","sign"],
+      heat:  ["run","jog","hike","bike","outside","outdoor","exercise","walk"],
+    };
+
+    function taskHasWeatherHazard(taskName, dueDateISO) {
+      // Pick hazards for the task's due date if available, else today
+      let hazards = currentHazards;
+      if (dueDateISO) {
+        const dateKey = dueDateISO.slice(0, 10); // "YYYY-MM-DD"
+        if (weatherForecast[dateKey]) hazards = weatherForecast[dateKey];
+      }
+      if (!hazards.length) return null;
+      const lower = taskName.toLowerCase();
+      const triggered = hazards.filter(hazard =>
+        HAZARD_KEYWORDS[hazard]?.some(kw => lower.includes(kw))
+      );
+      return triggered.length ? triggered : null;
+    }
+
+    const HAZARD_ICONS  = { rain:"🌧️", snow:"🌨️", storm:"⛈️", wind:"💨", heat:"🌡️" };
+    const HAZARD_LABELS = { rain:"Rain", snow:"Snow", storm:"Thunderstorm", wind:"High winds", heat:"Extreme heat" };
+
+    function hazardTooltip(hazards) {
+      return "Weather alert: " + hazards.map(h => HAZARD_ICONS[h] + " " + HAZARD_LABELS[h]).join(", ")
+           + " — this task may be affected.";
+    }
+
+    function setWeatherStatus(msg) {
+      document.getElementById("weatherStatus").textContent = msg;
+    }
+
+    function codeToHazards(code, wind, temp) {
+      const h = [];
+      if ([51,53,55,56,57,61,63,65,66,67,80,81,82].includes(code)) h.push("rain");
+      if ([71,73,75,77,85,86].includes(code))                       h.push("snow");
+      if ([95,96,99].includes(code))                                 h.push("storm");
+      if (wind > 20)                                                 h.push("wind");
+      if (temp > 95)                                                 h.push("heat");
+      return h;
+    }
+
+    async function fetchWeather() {
+      if (!navigator.geolocation) {
+        setWeatherStatus("⚠ Geolocation not supported by this browser.");
+        return;
+      }
+      setWeatherStatus("📍 Getting your location…");
+      navigator.geolocation.getCurrentPosition(
+        async ({ coords }) => {
+          setWeatherStatus("🌐 Fetching forecast…");
+          try {
+            const url =
+              `https://api.open-meteo.com/v1/forecast` +
+              `?latitude=${coords.latitude}&longitude=${coords.longitude}` +
+              `&current=weather_code,wind_speed_10m,temperature_2m` +
+              `&daily=weather_code,wind_speed_10m_max,temperature_2m_max` +
+              `&wind_speed_unit=mph&temperature_unit=fahrenheit` +
+              `&timezone=auto&forecast_days=16`;
+
+            const res  = await fetch(url);
+            const data = await res.json();
+
+            const cur = data.current;
+            currentHazards = codeToHazards(cur.weather_code, cur.wind_speed_10m, cur.temperature_2m);
+
+            weatherForecast = {};
+            const d = data.daily;
+            d.time.forEach((date, i) => {
+              weatherForecast[date] = codeToHazards(d.weather_code[i], d.wind_speed_10m_max[i], d.temperature_2m_max[i]);
+            });
+
+            const hazardDays = Object.values(weatherForecast).filter(h => h.length).length;
+            setWeatherStatus(
+              `🌤 Weather loaded — 16-day forecast, ${hazardDays} day(s) with hazards` +
+              (currentHazards.length ? ` · Today: ${currentHazards.join(", ")}` : "")
+            );
+            renderTasks();
+          } catch (e) {
+            setWeatherStatus("⚠ Could not fetch weather — check your internet connection.");
+            console.error("Weather error:", e);
+          }
+        },
+        (err) => {
+          const msgs = {
+            1: "Location permission denied — click the lock icon in the address bar to allow it.",
+            2: "Location unavailable.",
+            3: "Location request timed out.",
+          };
+          setWeatherStatus("📍 " + (msgs[err.code] || "Location error."));
+        }
+      );
+    }
+
+    function renderTasks() {
+      const list = document.getElementById("taskList");
+      list.innerHTML = "";
+
+      // Active tasks first, completed at the bottom
+      const sorted = [
+        ...tasks.filter(t => !t.completed),
+        ...tasks.filter(t =>  t.completed),
+      ];
+
+      sorted.forEach(task => {
+        const group    = groups[task.groupId] || null;
+        const priority = calcPriority(task.dueDate);
+
+        const li = document.createElement("li");
+        li.dataset.id = task.id;
+
+        if (task.completed) {
+          li.classList.add("completed");
+        } else if (group) {
+          li.style.background  = group.color + "22";
+          li.style.borderColor = group.color;
+        }
+
+        // ── Drag handle ──────────────────────────────────────────────────────
+        const handle = document.createElement("span");
+        handle.className = "drag-handle";
+        handle.textContent = "⠿";
+        handle.title = "Drag to reorder";
+
+        if (!task.completed) {
+          li.draggable = true;
+
+          li.addEventListener("dragstart", e => {
+            dragSrcId = task.id;
+            li.classList.add("dragging");
+            e.dataTransfer.effectAllowed = "move";
+          });
+          li.addEventListener("dragend", () => {
+            li.classList.remove("dragging");
+            document.querySelectorAll("#taskList li").forEach(el => el.classList.remove("drag-over"));
+          });
+          li.addEventListener("dragover", e => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "move";
+            if (dragSrcId !== task.id) li.classList.add("drag-over");
+          });
+          li.addEventListener("dragleave", () => li.classList.remove("drag-over"));
+          li.addEventListener("drop", e => {
+            e.preventDefault();
+            li.classList.remove("drag-over");
+            if (dragSrcId === task.id) return;
+
+            // Reorder within the active (non-completed) portion of tasks
+            const active    = tasks.filter(t => !t.completed);
+            const completed = tasks.filter(t =>  t.completed);
+            const fromIdx   = active.findIndex(t => t.id === dragSrcId);
+            const toIdx     = active.findIndex(t => t.id === task.id);
+            if (fromIdx === -1 || toIdx === -1) return;
+
+            const [moved] = active.splice(fromIdx, 1);
+            active.splice(toIdx, 0, moved);
+            tasks = [...active, ...completed];
+            save();
+            renderTasks();
+          });
+        }
+
+        // ── Task info ────────────────────────────────────────────────────────
+        const taskInfo = document.createElement("div");
+        taskInfo.className = "task-info";
+        taskInfo.style.flex = "1";
+
+        const nameEl = document.createElement("div");
+        nameEl.className = "task-name";
+        nameEl.textContent = task.name;
+
+        const dueEl = document.createElement("div");
+        dueEl.className = "task-due";
+        dueEl.textContent = task.dueDateDisplay ? "Due: " + task.dueDateDisplay : "No due date";
+
+        taskInfo.appendChild(nameEl);
+        taskInfo.appendChild(dueEl);
+
+        if (!task.completed && priority.label !== "None") {
+          const priEl = document.createElement("span");
+          priEl.className = "priority-badge";
+          priEl.style.background = priority.color;
+          priEl.textContent = priority.label;
+          taskInfo.appendChild(priEl);
+        }
+
+        if (!task.completed) {
+          const hazards = taskHasWeatherHazard(task.name, task.dueDate);
+          if (hazards) {
+            const warn = document.createElement("span");
+            warn.className = "weather-hazard";
+            warn.textContent = " " + hazards.map(h => HAZARD_ICONS[h]).join("");
+            warn.title = hazardTooltip(hazards);
+            nameEl.appendChild(warn);
+          }
+        }
+
+        if (group) {
+          const badge = document.createElement("span");
+          badge.className = "task-group-badge";
+          badge.style.background = group.color;
+          badge.textContent = group.name;
+          taskInfo.appendChild(badge);
+        }
+
+        // ── Action buttons ───────────────────────────────────────────────────
+        const actions = document.createElement("div");
+        actions.className = "task-actions";
+
+        const completeBtn = document.createElement("button");
+        completeBtn.className = "complete-btn" + (task.completed ? " undo" : "");
+        completeBtn.textContent = task.completed ? "Undo" : "✓";
+        completeBtn.title = task.completed ? "Mark incomplete" : "Mark complete";
+        completeBtn.onclick = () => {
+          const t = tasks.find(t => t.id === task.id);
+          if (t) t.completed = !t.completed;
+          save();
+          renderTasks();
+        };
+
+        const deleteBtn = document.createElement("button");
+        deleteBtn.textContent = "Delete";
+        deleteBtn.className = "delete-btn";
+        deleteBtn.onclick = () => {
+          tasks = tasks.filter(t => t.id !== task.id);
+          save();
+          renderTasks();
+        };
+
+        actions.appendChild(completeBtn);
+        actions.appendChild(deleteBtn);
+
+        li.appendChild(handle);
+        li.appendChild(taskInfo);
+        li.appendChild(actions);
+        list.appendChild(li);
+      });
+    }
+
+    function renderGroupList() {
+      const ul = document.getElementById("groupList");
+      ul.innerHTML = "";
+      Object.entries(groups).forEach(([id, g]) => {
+        const li = document.createElement("li");
+        li.style.background = g.color;
+        li.textContent = g.name;
+        const delBtn = document.createElement("button");
+        delBtn.textContent = "Remove";
+        delBtn.onclick = () => deleteGroup(id);
+        li.appendChild(delBtn);
+        ul.appendChild(li);
+      });
+    }
+
+    function renderGroupSelect() {
+      const sel = document.getElementById("groupSelect");
+      sel.innerHTML = '<option value="">No Group</option>';
+      Object.entries(groups).forEach(([id, g]) => {
+        const opt = document.createElement("option");
+        opt.value = id;
+        opt.textContent = g.name;
+        sel.appendChild(opt);
+      });
+    }
+
+    // ── Actions ──────────────────────────────────────────────────────────────
+    function openGroupModal()  { document.getElementById("groupModal").classList.add("open"); }
+    function closeGroupModal() { document.getElementById("groupModal").classList.remove("open"); }
+
+    function addGroup() {
+      const nameInput  = document.getElementById("newGroupName");
+      const colorInput = document.getElementById("newGroupColor");
+      const name = nameInput.value.trim();
+      if (!name) return;
+      const id = "g" + nextGroupId++;
+      groups[id] = { name, color: colorInput.value };
+      save();
+      renderGroupList();
+      renderGroupSelect();
+      nameInput.value = "";
+    }
+
+    function deleteGroup(id) {
+      delete groups[id];
+      save();
+      renderGroupList();
+      renderGroupSelect();
+    }
+
+    function addTask() {
+      const input    = document.getElementById("taskInput");
+      const dateInput = document.getElementById("dueDateInput");
+      const groupSel = document.getElementById("groupSelect");
+      if (!input.value.trim()) return;
+
+      const dueDateRaw = dateInput._flatpickr.selectedDates[0];
+      tasks.push({
+        id:             nextTaskId++,
+        name:           input.value.trim(),
+        dueDate:        dueDateRaw ? dueDateRaw.toISOString() : null,
+        dueDateDisplay: dateInput.value || null,
+        groupId:        groupSel.value || null,
+      });
+
+      save();
+      renderTasks();
+      input.value = "";
+      dateInput._flatpickr.clear();
+      input.focus();
+    }
+
+    // ── Background ───────────────────────────────────────────────────────────
+    function hexToRgb(hex) {
+      const h = hex.replace("#", "");
+      return [
+        parseInt(h.substring(0, 2), 16),
+        parseInt(h.substring(2, 4), 16),
+        parseInt(h.substring(4, 6), 16)
+      ];
+    }
+
+    function isLight(hex) {
+      const [r, g, b] = hexToRgb(hex);
+      // Perceived luminance formula
+      return (r * 0.299 + g * 0.587 + b * 0.114) > 140;
+    }
+
+    function setBg(color) {
+      document.body.style.background = color;
+      const textColor = isLight(color) ? "#333" : "#ffffff";
+      document.querySelector("h1").style.color = textColor;
+      document.getElementById("bgLabel").style.color = textColor;
+      document.getElementById("bgColorPicker").value = color;
+      localStorage.setItem("todo_bg", color);
+    }
+
+    function onBgSelectChange(value) {
+      const picker = document.getElementById("bgColorPicker");
+      if (value === "custom") {
+        picker.style.display = "inline-block";
+        picker.click();
+      } else {
+        picker.style.display = "none";
+        setBg(value);
+      }
+    }
+
+    // ── Init ─────────────────────────────────────────────────────────────────
+    load();
+    const savedBg = localStorage.getItem("todo_bg");
+    if (savedBg) {
+      const sel = document.getElementById("bgSelect");
+      const isPreset = [...sel.options].some(o => o.value === savedBg);
+      if (isPreset) {
+        sel.value = savedBg;
+      } else {
+        sel.value = "custom";
+        document.getElementById("bgColorPicker").style.display = "inline-block";
+      }
+      setBg(savedBg);
+    }
+    renderGroupList();
+    renderGroupSelect();
+    renderTasks();
+    fetchWeather();
+
+    document.getElementById("groupModal").addEventListener("click", function(e) {
+      if (e.target === this) closeGroupModal();
+    });
+  </script>
+</body>
+</html>
