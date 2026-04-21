@@ -208,6 +208,8 @@
       padding: 24px;
       width: 340px;
       box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+      overflow: visible;
+      position: relative;
     }
     .modal h2 { margin: 0 0 16px; font-size: 18px; color: #333; }
     .modal-row {
@@ -235,24 +237,67 @@
     .group-list li {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 6px;
       padding: 8px 10px;
       border-radius: 6px;
-      margin-bottom: 6px;
+      margin-bottom: 4px;
       font-size: 14px;
       font-weight: bold;
       color: white;
     }
-    .group-list li button {
-      margin-left: auto;
-      background: rgba(0,0,0,0.25);
-      color: white;
+    .group-arrow {
+      background: none;
       border: none;
-      border-radius: 4px;
-      padding: 3px 8px;
+      color: white;
       cursor: pointer;
-      font-size:12px;
+      font-size: 11px;
+      padding: 0 2px;
+      line-height: 1;
+      flex-shrink: 0;
     }
+    .group-action-btn {
+      border: none;
+      border-radius: 5px;
+      padding: 5px 8px;
+      cursor: pointer;
+      font-size: 13px;
+      line-height: 1;
+      color: white;
+      flex-shrink: 0;
+    }
+    .group-add-btn  { background: #5cb85c; }
+    .group-add-btn:hover  { background: #4a9e4a; }
+    .group-edit-btn { background: #4a90e2; }
+    .group-edit-btn:hover { background: #357abd; }
+    .group-del-btn  { background: #e05a5a; }
+    .group-del-btn:hover  { background: #c0392b; }
+    .group-inline-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 10px;
+      border-radius: 6px;
+      margin-bottom: 4px;
+      background: #f5f5f5;
+      border: 1px solid #ddd;
+      list-style: none;
+    }
+    .group-inline-row input[type="text"] {
+      flex: 1;
+      padding: 5px 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+    .group-inline-row input[type="color"] {
+      width: 32px;
+      height: 28px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      padding: 1px;
+      cursor: pointer;
+    }
+    .subgroup-indent { margin-left: 20px; }
     .modal-close {
       width: 100%;
       padding: 9px;
@@ -338,7 +383,9 @@
         <input type="text" id="editTaskName" placeholder="Task name" />
       </div>
       <div class="modal-row">
-        <input id="editDueDate" placeholder="Due date & time" style="flex:1;padding:8px 10px;border:1px solid #ccc;border-radius:6px;font-size:14px;" />
+        <div id="editDateWrapper" style="position:relative;flex:1;">
+          <input id="editDueDate" placeholder="Due date & time" style="width:100%;padding:8px 10px;border:1px solid #ccc;border-radius:6px;font-size:14px;box-sizing:border-box;" />
+        </div>
       </div>
       <div class="modal-row">
         <select id="editGroupSelect" style="flex:1;padding:8px 10px;border:1px solid #ccc;border-radius:6px;font-size:14px;background:white;cursor:pointer;">
@@ -365,6 +412,9 @@
     // ── Data ────────────────────────────────────────────────────────────────
     let groups = {};
     let nextGroupId = 1;
+    let expandedGroups = {};
+    let addingSubgroupTo = null;
+    let editingGroupId   = null;
     let tasks = [];   // [{ id, name, dueDate, dueDateDisplay, groupId }]
     let nextTaskId = 1;
 
@@ -524,9 +574,10 @@
         if (task.completed) {
           li.classList.add("completed");
         } else if (group) {
-          li.style.background  = group.color + "cc";
-          li.style.borderColor = group.color;
-          if (!isLight(group.color)) li.classList.add("dark-bg");
+          const bgGroup = group.parentId ? (groups[group.parentId] || group) : group;
+          li.style.background  = bgGroup.color + "cc";
+          li.style.borderColor = bgGroup.color;
+          if (!isLight(bgGroup.color)) li.classList.add("dark-bg");
         }
 
         // ── Drag handle ──────────────────────────────────────────────────────
@@ -609,6 +660,19 @@
         }
 
         if (group) {
+          const parentGroup = group.parentId ? groups[group.parentId] : null;
+          if (parentGroup) {
+            const parentBadge = document.createElement("span");
+            parentBadge.className = "task-group-badge";
+            parentBadge.style.background = parentGroup.color;
+            parentBadge.textContent = parentGroup.name;
+            taskInfo.appendChild(parentBadge);
+
+            const sep = document.createElement("span");
+            sep.textContent = " › ";
+            sep.style.cssText = "font-size:11px;font-weight:bold;color:#555;";
+            taskInfo.appendChild(sep);
+          }
           const badge = document.createElement("span");
           badge.className = "task-group-badge";
           badge.style.background = group.color;
@@ -661,27 +725,217 @@
     function renderGroupList() {
       const ul = document.getElementById("groupList");
       ul.innerHTML = "";
-      Object.entries(groups).forEach(([id, g]) => {
+      const topLevel    = Object.entries(groups).filter(([, g]) => !g.parentId);
+      const getChildren = pid => Object.entries(groups).filter(([, g]) => g.parentId === pid);
+
+      topLevel.forEach(([id, g]) => {
+        const children   = getChildren(id);
+        const isExpanded = !!expandedGroups[id];
+
+        // ── Main group row ───────────────────────────────────────────────────
         const li = document.createElement("li");
         li.style.background = g.color;
-        li.textContent = g.name;
+
+        const arrow = document.createElement("button");
+        arrow.className   = "group-arrow";
+        arrow.textContent = isExpanded ? "▼" : "▶";
+        arrow.title       = isExpanded ? "Collapse" : "Expand";
+        arrow.onclick     = () => { expandedGroups[id] = !isExpanded; renderGroupList(); };
+        li.appendChild(arrow);
+
+        const nameSpan = document.createElement("span");
+        nameSpan.textContent = g.name;
+        nameSpan.style.flex  = "1";
+        li.appendChild(nameSpan);
+
+        const addBtn = document.createElement("button");
+        addBtn.textContent = "+";
+        addBtn.title       = "Add subgroup";
+        addBtn.className   = "group-action-btn group-add-btn";
+        addBtn.onclick     = () => {
+          addingSubgroupTo = addingSubgroupTo === id ? null : id;
+          editingGroupId   = null;
+          expandedGroups[id] = true;
+          renderGroupList();
+        };
+        li.appendChild(addBtn);
+
+        const editBtn = document.createElement("button");
+        editBtn.textContent = "✏️";
+        editBtn.title       = "Edit group";
+        editBtn.className   = "group-action-btn group-edit-btn";
+        editBtn.onclick     = () => {
+          editingGroupId   = editingGroupId === id ? null : id;
+          addingSubgroupTo = null;
+          renderGroupList();
+        };
+        li.appendChild(editBtn);
+
         const delBtn = document.createElement("button");
-        delBtn.textContent = "Remove";
-        delBtn.onclick = () => deleteGroup(id);
+        delBtn.textContent = "✕";
+        delBtn.title       = "Delete group";
+        delBtn.className   = "group-action-btn group-del-btn";
+        delBtn.onclick     = () => deleteGroup(id);
         li.appendChild(delBtn);
+
         ul.appendChild(li);
+
+        if (editingGroupId === id) ul.appendChild(makeGroupEditRow(id, g, false));
+
+        // ── Subgroups ────────────────────────────────────────────────────────
+        if (isExpanded) {
+          if (addingSubgroupTo === id) ul.appendChild(makeSubgroupAddRow(id));
+
+          children.forEach(([subId, subG]) => {
+            const subLi = document.createElement("li");
+            subLi.className      = "subgroup-indent";
+            subLi.style.background = subG.color;
+
+            const subSpacer = document.createElement("span");
+            subSpacer.style.width = "16px";
+            subLi.appendChild(subSpacer);
+
+            const subName = document.createElement("span");
+            subName.textContent = subG.name;
+            subName.style.flex  = "1";
+            subLi.appendChild(subName);
+
+            const subEditBtn = document.createElement("button");
+            subEditBtn.textContent = "✏️";
+            subEditBtn.title       = "Edit subgroup";
+            subEditBtn.className   = "group-action-btn group-edit-btn";
+            subEditBtn.onclick     = () => {
+              editingGroupId   = editingGroupId === subId ? null : subId;
+              addingSubgroupTo = null;
+              renderGroupList();
+            };
+            subLi.appendChild(subEditBtn);
+
+            const subDelBtn = document.createElement("button");
+            subDelBtn.textContent = "✕";
+            subDelBtn.title       = "Delete subgroup";
+            subDelBtn.className   = "group-action-btn group-del-btn";
+            subDelBtn.onclick     = () => deleteGroup(subId);
+            subLi.appendChild(subDelBtn);
+
+            ul.appendChild(subLi);
+
+            if (editingGroupId === subId) ul.appendChild(makeGroupEditRow(subId, subG, true));
+          });
+        }
       });
+    }
+
+    function makeSubgroupAddRow(parentId) {
+      const li = document.createElement("li");
+      li.className = "group-inline-row subgroup-indent";
+
+      const nameIn = document.createElement("input");
+      nameIn.type        = "text";
+      nameIn.placeholder = "Subgroup name";
+
+      const colorIn = document.createElement("input");
+      colorIn.type  = "color";
+      colorIn.value = "#4a90e2";
+
+      const confirmBtn = document.createElement("button");
+      confirmBtn.textContent = "✓";
+      confirmBtn.className   = "group-action-btn group-add-btn";
+      confirmBtn.onclick     = () => {
+        const name = nameIn.value.trim();
+        if (!name) return;
+        const id = "g" + nextGroupId++;
+        groups[id] = { name, color: colorIn.value, parentId };
+        addingSubgroupTo = null;
+        save();
+        renderGroupList();
+        renderGroupSelect();
+      };
+
+      const cancelBtn = document.createElement("button");
+      cancelBtn.textContent = "✕";
+      cancelBtn.className   = "group-action-btn group-del-btn";
+      cancelBtn.onclick     = () => { addingSubgroupTo = null; renderGroupList(); };
+
+      li.appendChild(nameIn);
+      li.appendChild(colorIn);
+      li.appendChild(confirmBtn);
+      li.appendChild(cancelBtn);
+      return li;
+    }
+
+    function makeGroupEditRow(id, g, isSubgroup) {
+      const li = document.createElement("li");
+      li.className = "group-inline-row" + (isSubgroup ? " subgroup-indent" : "");
+
+      const nameIn = document.createElement("input");
+      nameIn.type  = "text";
+      nameIn.value = g.name;
+
+      const colorIn = document.createElement("input");
+      colorIn.type  = "color";
+      colorIn.value = g.color;
+
+      const saveBtn = document.createElement("button");
+      saveBtn.textContent = "✓";
+      saveBtn.className   = "group-action-btn group-add-btn";
+      saveBtn.onclick     = () => {
+        const name = nameIn.value.trim();
+        if (!name) return;
+        groups[id].name  = name;
+        groups[id].color = colorIn.value;
+        editingGroupId   = null;
+        save();
+        renderGroupList();
+        renderGroupSelect();
+        renderTasks();
+      };
+
+      const cancelBtn = document.createElement("button");
+      cancelBtn.textContent = "✕";
+      cancelBtn.className   = "group-action-btn";
+      cancelBtn.style.background = "#aaa";
+      cancelBtn.onclick = () => { editingGroupId = null; renderGroupList(); };
+
+      li.appendChild(nameIn);
+      li.appendChild(colorIn);
+      li.appendChild(saveBtn);
+      li.appendChild(cancelBtn);
+      return li;
     }
 
     function renderGroupSelect() {
       const sel = document.getElementById("groupSelect");
       sel.innerHTML = '<option value="">No Group</option>';
-      Object.entries(groups).forEach(([id, g]) => {
+      const topLevel = Object.entries(groups).filter(([, g]) => !g.parentId);
+      topLevel.forEach(([id, g]) => {
         const opt = document.createElement("option");
         opt.value = id;
         opt.textContent = g.name;
         sel.appendChild(opt);
+        Object.entries(groups)
+          .filter(([, sg]) => sg.parentId === id)
+          .forEach(([subId, subG]) => {
+            const subOpt = document.createElement("option");
+            subOpt.value = subId;
+            subOpt.textContent = "  → " + subG.name;
+            sel.appendChild(subOpt);
+          });
       });
+    }
+
+    function renderGroupParentSelect() {
+      const sel = document.getElementById("newGroupParent");
+      if (!sel) return;
+      sel.innerHTML = '<option value="">No parent (top-level)</option>';
+      Object.entries(groups)
+        .filter(([, g]) => !g.parentId)
+        .forEach(([id, g]) => {
+          const opt = document.createElement("option");
+          opt.value = id;
+          opt.textContent = g.name;
+          sel.appendChild(opt);
+        });
     }
 
     // ── Actions ──────────────────────────────────────────────────────────────
@@ -702,11 +956,20 @@
       // Populate group select
       const sel = document.getElementById("editGroupSelect");
       sel.innerHTML = '<option value="">No Group</option>';
-      Object.entries(groups).forEach(([id, g]) => {
+      const topLevel = Object.entries(groups).filter(([, g]) => !g.parentId);
+      topLevel.forEach(([id, g]) => {
         const opt = document.createElement("option");
         opt.value = id;
         opt.textContent = g.name;
         sel.appendChild(opt);
+        Object.entries(groups)
+          .filter(([, sg]) => sg.parentId === id)
+          .forEach(([subId, subG]) => {
+            const subOpt = document.createElement("option");
+            subOpt.value = subId;
+            subOpt.textContent = "  → " + subG.name;
+            sel.appendChild(subOpt);
+          });
       });
       sel.value = task.groupId || "";
 
@@ -716,6 +979,18 @@
         enableTime: true,
         dateFormat: "M j, Y h:i K",
         defaultDate: task.dueDate ? new Date(task.dueDate) : null,
+        onOpen: function(_d, _s, instance) {
+          setTimeout(() => {
+            const rect     = document.getElementById("editDueDate").getBoundingClientRect();
+            const cal      = instance.calendarContainer;
+            const calWidth = cal.offsetWidth || 308;
+            const left     = rect.left + (rect.width / 2) - (calWidth / 2);
+            cal.style.position = "fixed";
+            cal.style.top      = (rect.bottom + 4) + "px";
+            cal.style.left     = Math.max(4, left) + "px";
+            cal.style.zIndex   = "200";
+          }, 0);
+        },
       });
 
       document.getElementById("editModal").classList.add("open");
@@ -751,7 +1026,7 @@
       const name = nameInput.value.trim();
       if (!name) return;
       const id = "g" + nextGroupId++;
-      groups[id] = { name, color: colorInput.value };
+      groups[id] = { name, color: colorInput.value, parentId: null };
       save();
       renderGroupList();
       renderGroupSelect();
@@ -762,10 +1037,12 @@
 
     function deleteGroup(id) {
       const group      = groups[id];
+      const subgroups  = Object.entries(groups).filter(([, g]) => g.parentId === id);
       const groupTasks = tasks.filter(t => t.groupId === id);
+      const subTasks   = subgroups.flatMap(([sid]) => tasks.filter(t => t.groupId === sid));
+      const allTasks   = [...groupTasks, ...subTasks];
 
-      if (!groupTasks.length) {
-        // No tasks — just remove immediately
+      if (!allTasks.length && !subgroups.length) {
         delete groups[id];
         save();
         renderGroupList();
@@ -774,15 +1051,22 @@
         return;
       }
 
-      // Build the message
       pendingRemoveGroupId = id;
-      const names = groupTasks.map(t => `<li>${t.name}</li>`).join("");
-      const word  = groupTasks.length === 1 ? "task" : "tasks";
-      document.getElementById("removeGroupMsg").innerHTML =
-        `You are removing the group <strong>${group.name}</strong>, which has the following ${word} in it:` +
-        `<ul>${names}</ul>` +
-        `Do you want to remove them as well?`;
+      let msg = `You are removing the group <strong>${group.name}</strong>`;
 
+      if (subgroups.length) {
+        const subNames = subgroups.map(([, sg]) => `<li>${sg.name}</li>`).join("");
+        msg += `, along with its subgroup${subgroups.length > 1 ? "s" : ""}: <ul>${subNames}</ul>`;
+      }
+
+      if (allTasks.length) {
+        const taskNames = allTasks.map(t => `<li>${t.name}</li>`).join("");
+        const word = allTasks.length === 1 ? "task" : "tasks";
+        msg += `This affects the following ${word}: <ul>${taskNames}</ul>`;
+      }
+
+      msg += `Do you want to remove the tasks as well?`;
+      document.getElementById("removeGroupMsg").innerHTML = msg;
       document.getElementById("removeGroupModal").classList.add("open");
     }
 
@@ -795,18 +1079,21 @@
       const id = pendingRemoveGroupId;
       if (!id) return;
 
+      const subgroupIds  = Object.entries(groups).filter(([, g]) => g.parentId === id).map(([sid]) => sid);
+      const affectedIds  = [id, ...subgroupIds];
+
       if (deleteTasks) {
-        tasks = tasks.filter(t => t.groupId !== id);
+        tasks = tasks.filter(t => !affectedIds.includes(t.groupId));
       } else {
-        // Ungroup the tasks instead of deleting them
-        tasks.forEach(t => { if (t.groupId === id) t.groupId = null; });
+        tasks.forEach(t => { if (affectedIds.includes(t.groupId)) t.groupId = null; });
       }
 
-      delete groups[id];
+      affectedIds.forEach(gid => delete groups[gid]);
       save();
       closeRemoveGroupModal();
       renderGroupList();
       renderGroupSelect();
+      renderGroupParentSelect();
       renderTasks();
     }
 
