@@ -11,15 +11,20 @@ export default async function handler(req, res) {
   if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
 
   const now = new Date();
-  const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
 
-  // Fetch reminders due within the next 24 hours that haven't been sent yet
-  const { data: reminders, error: fetchError } = await supabase
+  // Fetch all unsent reminders that are still in the future
+  const { data: allReminders, error: fetchError } = await supabase
     .from("reminders")
     .select("*")
     .eq("reminder_sent", false)
-    .lte("due_date", in24h.toISOString())
     .gt("due_date", now.toISOString());
+
+  // Filter to only those whose reminder window has arrived based on their offset
+  const reminders = (allReminders || []).filter(r => {
+    const dueDate = new Date(r.due_date);
+    const offsetMs = (r.reminder_offset_hours || 24) * 60 * 60 * 1000;
+    return now >= new Date(dueDate.getTime() - offsetMs);
+  });
 
   if (fetchError) return res.status(500).json({ error: fetchError.message });
 
