@@ -42,7 +42,7 @@ export default async function handler(req, res) {
 
     const { error: emailError } = await resend.emails.send({
       from: process.env.RESEND_FROM_EMAIL,
-      to: reminder.email,
+      to: process.env.REMINDER_TO_EMAIL || reminder.email,
       subject: `Reminder: "${reminder.task_name}" is due in 24 hours`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px; background: #f9f9f9; border-radius: 8px;">
