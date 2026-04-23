@@ -10,6 +10,8 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 export default async function handler(req, res) {
   if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
 
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+
   const now = new Date();
 
   // Fetch all unsent reminders that are still in the future
@@ -57,13 +59,16 @@ export default async function handler(req, res) {
       `,
     });
 
-    if (!emailError) {
+    if (emailError) {
+      console.error("Resend error:", JSON.stringify(emailError));
+    } else {
       await supabase
         .from("reminders")
         .update({ reminder_sent: true })
         .eq("id", reminder.id);
       sent++;
     }
+
   }
 
   // Clean up past-due reminders (already sent or overdue)
