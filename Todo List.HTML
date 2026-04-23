@@ -989,10 +989,13 @@
             const cal      = instance.calendarContainer;
             const calWidth = cal.offsetWidth || 308;
             const left     = rect.left + (rect.width / 2) - (calWidth / 2);
-            cal.style.position = "fixed";
-            cal.style.top      = (rect.bottom + 4) + "px";
-            cal.style.left     = Math.max(4, left) + "px";
-            cal.style.zIndex   = "200";
+            const availableHeight = window.innerHeight - rect.bottom - 8;
+            cal.style.position  = "fixed";
+            cal.style.top       = (rect.bottom + 4) + "px";
+            cal.style.left      = Math.max(4, left) + "px";
+            cal.style.zIndex    = "200";
+            cal.style.maxHeight = Math.max(180, availableHeight) + "px";
+            cal.style.overflowY = "auto";
           }, 0);
         },
       });
