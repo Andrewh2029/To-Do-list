@@ -1,0 +1,8 @@
+{
+  "name": "todo-reminder-api",
+  "version": "1.0.0",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.0.0",
+    "resend": "^3.0.0"
+  }
+}
