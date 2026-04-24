@@ -388,6 +388,7 @@
     <select id="groupSelect"><option value="">No Group</option></select>
     <button class="btn btn-blue" onclick="addTask()">Add</button>
     <button class="btn btn-green" onclick="openGroupModal()">Groups</button>
+    <button id="undoBtn" class="btn" onclick="undo()" disabled style="background:#888;">Undo</button>
   </div>
 
   <ul id="taskList"></ul>
@@ -403,6 +404,22 @@
       </div>
       <ul class="group-list" id="groupList"></ul>
       <button class="modal-close" onclick="closeGroupModal()">Close</button>
+    </div>
+  </div>
+
+  <!-- Delete Task Confirm Modal -->
+  <div class="modal-overlay" id="deleteTaskModal">
+    <div class="modal">
+      <h2>Delete Task</h2>
+      <div class="confirm-msg">Are you sure you want to delete this task?</div>
+      <label style="font-size:13px; display:flex; align-items:center; gap:6px; margin:12px 0;">
+        <input type="checkbox" id="skipDeleteConfirm" onchange="localStorage.setItem('todo_skipDeleteConfirm', this.checked)">
+        Don't ask me again
+      </label>
+      <div class="confirm-actions">
+        <button class="btn-danger" onclick="confirmDeleteTask()">Delete</button>
+        <button class="modal-close" style="flex:1;" onclick="closeDeleteTaskModal()">Cancel</button>
+      </div>
     </div>
   </div>
 
@@ -461,6 +478,31 @@
     let editingGroupId   = null;
     let tasks = [];   // [{ id, name, dueDate, dueDateDisplay, groupId }]
     let nextTaskId = 1;
+    let undoStack = [];
+
+    function snapshot() {
+      undoStack.push({
+        tasks: JSON.parse(JSON.stringify(tasks)),
+        groups: JSON.parse(JSON.stringify(groups)),
+        nextTaskId,
+        nextGroupId
+      });
+      if (undoStack.length > 20) undoStack.shift();
+      document.getElementById("undoBtn").disabled = false;
+    }
+
+    function undo() {
+      if (!undoStack.length) return;
+      const prev = undoStack.pop();
+      tasks = prev.tasks;
+      groups = prev.groups;
+      nextTaskId = prev.nextTaskId;
+      nextGroupId = prev.nextGroupId;
+      save();
+      renderTasks();
+      renderGroupSelect();
+      document.getElementById("undoBtn").disabled = undoStack.length === 0;
+    }
 
     // ── Persistence ─────────────────────────────────────────────────────────
     function save() {
@@ -799,6 +841,7 @@
         completeBtn.textContent = task.completed ? "Undo" : "✓";
         completeBtn.title = task.completed ? "Mark incomplete" : "Mark complete";
         completeBtn.onclick = () => {
+          snapshot();
           const t = tasks.find(t => t.id === task.id);
           if (t) t.completed = !t.completed;
           save();
@@ -815,17 +858,13 @@
         deleteBtn.textContent = "✕";
         deleteBtn.className = "delete-btn";
         deleteBtn.title = "Delete task";
-        deleteBtn.onclick = async () => {
-          if (task.reminderSet) {
-            await fetch(`${REMINDER_API}/api/remove-reminder`, {
-              method: "DELETE",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ task_id: task.id })
-            }).catch(() => {});
+        deleteBtn.onclick = () => {
+          if (document.getElementById("skipDeleteConfirm").checked) {
+            executeDeleteTask(task.id);
+          } else {
+            pendingDeleteTaskId = task.id;
+            document.getElementById("deleteTaskModal").classList.add("open");
           }
-          tasks = tasks.filter(t => t.id !== task.id);
-          save();
-          renderTasks();
         };
 
         const bellBtn = document.createElement("button");
@@ -1132,6 +1171,7 @@
     function saveEdit() {
       const task = tasks.find(t => t.id === editingTaskId);
       if (!task) return;
+      snapshot();
 
       const name = document.getElementById("editTaskName").value.trim();
       if (!name) return;
@@ -1161,6 +1201,33 @@
     }
 
     let pendingRemoveGroupId = null;
+    let pendingDeleteTaskId  = null;
+
+    async function executeDeleteTask(id) {
+      snapshot();
+      const task = tasks.find(t => t.id === id);
+      if (task?.reminderSet) {
+        await fetch(`${REMINDER_API}/api/remove-reminder`, {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ task_id: id })
+        }).catch(() => {});
+      }
+      tasks = tasks.filter(t => t.id !== id);
+      save();
+      renderTasks();
+    }
+
+    function confirmDeleteTask() {
+      const id = pendingDeleteTaskId;
+      closeDeleteTaskModal();
+      if (id !== null) executeDeleteTask(id);
+    }
+
+    function closeDeleteTaskModal() {
+      document.getElementById("deleteTaskModal").classList.remove("open");
+      pendingDeleteTaskId = null;
+    }
 
     function deleteGroup(id) {
       const group      = groups[id];
@@ -1205,6 +1272,7 @@
     function confirmRemoveGroup(deleteTasks) {
       const id = pendingRemoveGroupId;
       if (!id) return;
+      snapshot();
 
       const subgroupIds  = Object.entries(groups).filter(([, g]) => g.parentId === id).map(([sid]) => sid);
       const affectedIds  = [id, ...subgroupIds];
@@ -1229,6 +1297,7 @@
       const dateInput = document.getElementById("dueDateInput");
       const groupSel = document.getElementById("groupSelect");
       if (!input.value.trim()) return;
+      snapshot();
 
       const dueDateRaw = dateInput._flatpickr.selectedDates[0];
       tasks.push({
@@ -1310,6 +1379,10 @@
     document.getElementById("removeGroupModal").addEventListener("click", function(e) {
       if (e.target === this) closeRemoveGroupModal();
     });
+    document.getElementById("deleteTaskModal").addEventListener("click", function(e) {
+      if (e.target === this) closeDeleteTaskModal();
+    });
+    document.getElementById("skipDeleteConfirm").checked = localStorage.getItem("todo_skipDeleteConfirm") === "true";
   </script>
 </body>
 </html>
