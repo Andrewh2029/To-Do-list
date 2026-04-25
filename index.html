@@ -389,6 +389,12 @@
     <button class="btn btn-blue" onclick="addTask()">Add</button>
     <button class="btn btn-green" onclick="openGroupModal()">Groups</button>
     <button id="undoBtn" class="btn" onclick="undo()" disabled style="background:#888;">Undo</button>
+    <div style="position:relative; display:inline-block;">
+      <button id="filterBtn" class="btn" onclick="toggleFilterDropdown()" style="background:#6c5ce7;">Filter</button>
+      <div id="filterDropdown" style="display:none; position:absolute; top:110%; left:0; background:white; border:1px solid #ccc; border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.15); min-width:180px; z-index:999; padding:8px 0;">
+        <div id="filterList"></div>
+      </div>
+    </div>
   </div>
 
   <ul id="taskList"></ul>
@@ -479,6 +485,85 @@
     let tasks = [];   // [{ id, name, dueDate, dueDateDisplay, groupId }]
     let nextTaskId = 1;
     let undoStack = [];
+    let selectedGroups = new Set(); // empty = show all; non-empty = show only these
+
+    function toggleFilterDropdown() {
+      const dd = document.getElementById("filterDropdown");
+      if (dd.style.display === "none") {
+        renderFilterDropdown();
+        dd.style.display = "block";
+      } else {
+        dd.style.display = "none";
+      }
+    }
+
+    function renderFilterDropdown() {
+      const list = document.getElementById("filterList");
+      list.innerHTML = "";
+
+      // Show All row
+      const showAllRow = document.createElement("label");
+      showAllRow.style.cssText = "display:flex; align-items:center; gap:8px; padding:7px 14px; cursor:pointer; font-size:14px; font-weight:bold; border-bottom:1px solid #eee;";
+      showAllRow.onmouseover = () => showAllRow.style.background = "#f5f5f5";
+      showAllRow.onmouseout  = () => showAllRow.style.background = "";
+      const showAllCb = document.createElement("input");
+      showAllCb.type = "checkbox";
+      showAllCb.checked = selectedGroups.size === 0;
+      showAllCb.onchange = () => {
+        selectedGroups.clear();
+        updateFilterBtn();
+        renderFilterDropdown();
+        renderTasks();
+      };
+      showAllRow.appendChild(showAllCb);
+      showAllRow.appendChild(document.createTextNode("Show All"));
+      list.appendChild(showAllRow);
+
+      // Build ordered list: parents first, then their subgroups indented
+      const topLevel = Object.entries(groups).filter(([, g]) => !g.parentId);
+      const items = [{ id: "none", label: "No Group", color: "#888", indent: false }];
+      topLevel.forEach(([pid, pg]) => {
+        items.push({ id: pid, label: pg.name, color: pg.color, indent: false });
+        Object.entries(groups).filter(([, g]) => g.parentId === pid).forEach(([sid, sg]) => {
+          items.push({ id: sid, label: sg.name, color: sg.color, indent: true });
+        });
+      });
+
+      items.forEach(({ id, label, color, indent }) => {
+        const row = document.createElement("label");
+        row.style.cssText = `display:flex; align-items:center; gap:8px; padding:7px 14px; padding-left:${indent ? "28px" : "14px"}; cursor:pointer; font-size:14px;`;
+        row.onmouseover = () => row.style.background = "#f5f5f5";
+        row.onmouseout  = () => row.style.background = "";
+
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = selectedGroups.has(id);
+        cb.onchange = () => {
+          if (cb.checked) {
+            selectedGroups.add(id);
+          } else {
+            selectedGroups.delete(id);
+            // if unchecking a parent, also uncheck its subgroups
+            Object.entries(groups).filter(([, g]) => g.parentId === id).forEach(([sid]) => selectedGroups.delete(sid));
+          }
+          updateFilterBtn();
+          renderFilterDropdown();
+          renderTasks();
+        };
+
+        const dot = document.createElement("span");
+        dot.style.cssText = `width:10px; height:10px; border-radius:50%; background:${color}; display:inline-block; flex-shrink:0;`;
+
+        row.appendChild(cb);
+        row.appendChild(dot);
+        row.appendChild(document.createTextNode(label));
+        list.appendChild(row);
+      });
+    }
+
+    function updateFilterBtn() {
+      document.getElementById("filterBtn").style.background = selectedGroups.size ? "#e17055" : "#6c5ce7";
+    }
 
     function snapshot() {
       undoStack.push({
@@ -710,10 +795,20 @@
       const list = document.getElementById("taskList");
       list.innerHTML = "";
 
+      // Apply group filter
+      const visible = tasks.filter(t => {
+        if (selectedGroups.size === 0) return true;
+        const gid = t.groupId || "none";
+        if (selectedGroups.has(gid)) return true;
+        // if task is in a subgroup, check if its parent is selected
+        const parentId = groups[gid]?.parentId;
+        return parentId ? selectedGroups.has(parentId) : false;
+      });
+
       // Active tasks first, completed at the bottom
       const sorted = [
-        ...tasks.filter(t => !t.completed),
-        ...tasks.filter(t =>  t.completed),
+        ...visible.filter(t => !t.completed),
+        ...visible.filter(t =>  t.completed),
       ];
 
       sorted.forEach(task => {
@@ -1381,6 +1476,12 @@
     });
     document.getElementById("deleteTaskModal").addEventListener("click", function(e) {
       if (e.target === this) closeDeleteTaskModal();
+    });
+    document.addEventListener("click", function(e) {
+      const dd = document.getElementById("filterDropdown");
+      if (dd.style.display !== "none" && !document.getElementById("filterBtn").contains(e.target) && !dd.contains(e.target)) {
+        dd.style.display = "none";
+      }
     });
     document.getElementById("skipDeleteConfirm").checked = localStorage.getItem("todo_skipDeleteConfirm") === "true";
   </script>
