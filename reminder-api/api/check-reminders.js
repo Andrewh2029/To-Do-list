@@ -40,6 +40,7 @@ export default async function handler(req, res) {
       year: "numeric",
       hour: "numeric",
       minute: "2-digit",
+      timeZone: "America/New_York",
     });
 
     const { error: emailError } = await resend.emails.send({
