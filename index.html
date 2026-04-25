@@ -429,6 +429,33 @@
     </div>
   </div>
 
+  <!-- Email Modal -->
+  <div class="modal-overlay" id="emailModal">
+    <div class="modal">
+      <div id="emailStep1">
+        <h2>Email Reminder</h2>
+        <p style="font-size:14px;color:#555;margin-bottom:10px;">Enter your email to receive reminders:</p>
+        <input id="emailInput" type="email" placeholder="you@example.com"
+          style="width:100%;padding:8px 10px;border:1px solid #ccc;border-radius:6px;font-size:14px;box-sizing:border-box;"
+          onkeydown="if(event.key==='Enter') emailStep1Continue()" />
+        <p id="emailError" style="color:red;font-size:13px;margin:6px 0 0;display:none;">Please enter a valid email address.</p>
+        <div class="confirm-actions" style="margin-top:14px;">
+          <button class="btn btn-blue" style="flex:1;" onclick="emailStep1Continue()">Continue</button>
+          <button class="modal-close" style="flex:1;" onclick="closeEmailModal()">Cancel</button>
+        </div>
+      </div>
+      <div id="emailStep2" style="display:none;">
+        <h2>Confirm Email</h2>
+        <p style="font-size:14px;color:#555;margin-bottom:8px;">Is this your email?</p>
+        <p id="emailConfirmDisplay" style="font-weight:bold;font-size:16px;word-break:break-all;margin-bottom:14px;"></p>
+        <div class="confirm-actions">
+          <button class="btn btn-blue" style="flex:1;" onclick="emailStep2Confirm()">Yes, that's right</button>
+          <button class="modal-close" style="flex:1;" onclick="emailStep2Back()">No, change it</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Remove Group Confirm Modal -->
   <div class="modal-overlay" id="removeGroupModal">
     <div class="modal">
@@ -609,13 +636,46 @@
     // ── Email reminders ─────────────────────────────────────────────────────
     const REMINDER_API = "https://to-do-list-six-lovat.vercel.app";
 
-    function getReminderEmail() {
-      let email = localStorage.getItem("todo_reminder_email");
-      if (!email) {
-        email = prompt("Enter your email address to receive reminders:");
-        if (email) localStorage.setItem("todo_reminder_email", email);
-      }
-      return email;
+    let emailModalResolve = null;
+
+    function openEmailModal() {
+      return new Promise(resolve => {
+        emailModalResolve = resolve;
+        const saved = localStorage.getItem("todo_reminder_email");
+        if (saved) { resolve(saved); return; }
+        document.getElementById("emailStep1").style.display = "";
+        document.getElementById("emailStep2").style.display = "none";
+        document.getElementById("emailInput").value = "";
+        document.getElementById("emailError").style.display = "none";
+        document.getElementById("emailModal").classList.add("open");
+        setTimeout(() => document.getElementById("emailInput").focus(), 50);
+      });
+    }
+
+    function emailStep1Continue() {
+      const val = document.getElementById("emailInput").value.trim();
+      const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val);
+      if (!valid) { document.getElementById("emailError").style.display = ""; return; }
+      document.getElementById("emailConfirmDisplay").textContent = val;
+      document.getElementById("emailStep1").style.display = "none";
+      document.getElementById("emailStep2").style.display = "";
+    }
+
+    function emailStep2Confirm() {
+      const email = document.getElementById("emailInput").value.trim();
+      localStorage.setItem("todo_reminder_email", email);
+      closeEmailModal(false);
+      if (emailModalResolve) { emailModalResolve(email); emailModalResolve = null; }
+    }
+
+    function emailStep2Back() {
+      document.getElementById("emailStep1").style.display = "";
+      document.getElementById("emailStep2").style.display = "none";
+    }
+
+    function closeEmailModal(cancel = true) {
+      document.getElementById("emailModal").classList.remove("open");
+      if (cancel && emailModalResolve) { emailModalResolve(null); emailModalResolve = null; }
     }
 
     function showReminderPicker(task, bellBtn) {
@@ -646,7 +706,7 @@
     }
 
     async function setReminder(task, reminderOffsetHours = 24) {
-      const email = getReminderEmail();
+      const email = await openEmailModal();
       if (!email) return;
       try {
         const res = await fetch(`${REMINDER_API}/api/set-reminder`, {
@@ -1476,6 +1536,9 @@
     });
     document.getElementById("deleteTaskModal").addEventListener("click", function(e) {
       if (e.target === this) closeDeleteTaskModal();
+    });
+    document.getElementById("emailModal").addEventListener("click", function(e) {
+      if (e.target === this) closeEmailModal();
     });
     document.addEventListener("click", function(e) {
       const dd = document.getElementById("filterDropdown");
